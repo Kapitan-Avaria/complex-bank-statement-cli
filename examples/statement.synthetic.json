@@ -1,0 +1,723 @@
+{
+  "schema_version": 1,
+  "requested_period": {
+    "start": "2026-10-01",
+    "end": "2026-10-08"
+  },
+  "products": [
+    {
+      "product": {
+        "product_id": "product-7b9a9db57020fcc6",
+        "source_id": {
+          "value": "master-demo",
+          "status": "known",
+          "reason": null
+        },
+        "name": {
+          "value": "Дебетовый счет ***0001",
+          "status": "known",
+          "reason": null
+        },
+        "product_type": {
+          "value": "MasterAccount",
+          "status": "known",
+          "reason": null
+        },
+        "masked_number": {
+          "value": "***0001",
+          "status": "known",
+          "reason": null
+        },
+        "currency": {
+          "value": "RUB",
+          "status": "known",
+          "reason": null
+        },
+        "current_balance": {
+          "value": {
+            "value": {
+              "amount": "100.00",
+              "currency": "RUB"
+            },
+            "read_at": "2026-10-09T15:30:24.604685+00:00",
+            "source": "VTB account details: Баланс"
+          },
+          "status": "known",
+          "reason": null
+        },
+        "available_balance": {
+          "value": null,
+          "status": "absent",
+          "reason": "no_separately_labelled_available_balance_in_observed_details"
+        },
+        "requisites": {
+          "value": [
+            {
+              "name": "Счет получателя в банке получателя",
+              "value": "40817810000000000001"
+            },
+            {
+              "name": "Дата открытия",
+              "value": "01.01.2025"
+            },
+            {
+              "name": "Валюта счета",
+              "value": "Российский рубль"
+            }
+          ],
+          "status": "known",
+          "reason": null
+        },
+        "opened_on": {
+          "value": "2025-01-01",
+          "status": "known",
+          "reason": null
+        }
+      },
+      "status": "complete",
+      "extraction_period": {
+        "start": "2026-10-01",
+        "end": "2026-10-08"
+      },
+      "statement": {
+        "account_number": "40817810000000000001",
+        "currency": "RUB",
+        "period": {
+          "start": "2026-10-01",
+          "end": "2026-10-08"
+        },
+        "opening_balance": {
+          "amount": "100.00",
+          "currency": "RUB"
+        },
+        "closing_balance": {
+          "amount": "80.00",
+          "currency": "RUB"
+        },
+        "pages_processed": 2,
+        "history_confirmed": true,
+        "operations": [],
+        "rejected_rows": []
+      }
+    },
+    {
+      "product": {
+        "product_id": "product-93955b215ef74558",
+        "source_id": {
+          "value": "savings-demo",
+          "status": "known",
+          "reason": null
+        },
+        "name": {
+          "value": "Накопительный счет ***0002",
+          "status": "known",
+          "reason": null
+        },
+        "product_type": {
+          "value": "SavingsAccount",
+          "status": "known",
+          "reason": null
+        },
+        "masked_number": {
+          "value": "***0002",
+          "status": "known",
+          "reason": null
+        },
+        "currency": {
+          "value": "RUB",
+          "status": "known",
+          "reason": null
+        },
+        "current_balance": {
+          "value": null,
+          "status": "absent",
+          "reason": "savings_header_balance_semantics_unconfirmed"
+        },
+        "available_balance": {
+          "value": null,
+          "status": "absent",
+          "reason": "no_separately_labelled_available_balance_in_observed_details"
+        },
+        "requisites": {
+          "value": [
+            {
+              "name": "Номер счета",
+              "value": "40817810000000000002"
+            },
+            {
+              "name": "Дата открытия",
+              "value": "07.10.2026"
+            },
+            {
+              "name": "Валюта счета",
+              "value": "Российский рубль"
+            }
+          ],
+          "status": "known",
+          "reason": null
+        },
+        "opened_on": {
+          "value": "2026-10-07",
+          "status": "known",
+          "reason": null
+        }
+      },
+      "status": "complete",
+      "extraction_period": {
+        "start": "2026-10-07",
+        "end": "2026-10-08"
+      },
+      "statement": {
+        "account_number": "40817810000000000002",
+        "currency": "RUB",
+        "period": {
+          "start": "2026-10-07",
+          "end": "2026-10-08"
+        },
+        "opening_balance": {
+          "amount": "100.00",
+          "currency": "RUB"
+        },
+        "closing_balance": {
+          "amount": "100.00",
+          "currency": "RUB"
+        },
+        "pages_processed": 2,
+        "history_confirmed": true,
+        "operations": [],
+        "rejected_rows": []
+      }
+    },
+    {
+      "product": {
+        "product_id": "product-3f916eb127d3a156",
+        "source_id": {
+          "value": "deposit-demo",
+          "status": "known",
+          "reason": null
+        },
+        "name": {
+          "value": "Срочный вклад (синтетический) ***0003",
+          "status": "known",
+          "reason": null
+        },
+        "product_type": {
+          "value": "TermDeposit",
+          "status": "known",
+          "reason": null
+        },
+        "masked_number": {
+          "value": "***0003",
+          "status": "known",
+          "reason": null
+        },
+        "currency": {
+          "value": "RUB",
+          "status": "known",
+          "reason": null
+        },
+        "current_balance": {
+          "value": null,
+          "status": "absent",
+          "reason": "savings_header_balance_semantics_unconfirmed"
+        },
+        "available_balance": {
+          "value": null,
+          "status": "absent",
+          "reason": "no_separately_labelled_available_balance_in_observed_details"
+        },
+        "requisites": {
+          "value": [
+            {
+              "name": "Номер счета",
+              "value": "42301810000000000003"
+            },
+            {
+              "name": "Дата открытия",
+              "value": "05.10.2026"
+            },
+            {
+              "name": "Валюта счета",
+              "value": "Российский рубль"
+            }
+          ],
+          "status": "known",
+          "reason": null
+        },
+        "opened_on": {
+          "value": "2026-10-05",
+          "status": "known",
+          "reason": null
+        }
+      },
+      "status": "complete",
+      "extraction_period": {
+        "start": "2026-10-05",
+        "end": "2026-10-08"
+      },
+      "statement": {
+        "account_number": "42301810000000000003",
+        "currency": "RUB",
+        "period": {
+          "start": "2026-10-05",
+          "end": "2026-10-08"
+        },
+        "opening_balance": {
+          "amount": "100.00",
+          "currency": "RUB"
+        },
+        "closing_balance": {
+          "amount": "105.00",
+          "currency": "RUB"
+        },
+        "pages_processed": 1,
+        "history_confirmed": true,
+        "operations": [],
+        "rejected_rows": []
+      }
+    }
+  ],
+  "cards": [
+    {
+      "card": {
+        "card_id": "card-0d3fe1dc843c2c00",
+        "source_id": {
+          "value": "card-demo",
+          "status": "known",
+          "reason": null
+        },
+        "masked_number": {
+          "value": "****4321",
+          "status": "known",
+          "reason": null
+        },
+        "account_link": {
+          "value": {
+            "product_id": "product-7b9a9db57020fcc6",
+            "source": "fresh_account_and_card_requisites_full_number_match"
+          },
+          "status": "known",
+          "reason": null
+        },
+        "available_balance": {
+          "value": {
+            "value": {
+              "amount": "75.50",
+              "currency": "RUB"
+            },
+            "document_id": "70f19874da67419ca11ea5336129689e",
+            "document_period": {
+              "start": "2026-10-01",
+              "end": "2026-10-08"
+            },
+            "acquired_at": "2026-10-09T15:30:27.401607+00:00",
+            "as_of": {
+              "value": null,
+              "status": "absent",
+              "reason": "balance_as_of_not_in_document"
+            }
+          },
+          "status": "known",
+          "reason": null
+        }
+      },
+      "status": "complete",
+      "pages_processed": 1
+    }
+  ],
+  "operations": [
+    {
+      "product_id": "product-7b9a9db57020fcc6",
+      "document_id": "bdea360e56d045ed926149f5b0390f28",
+      "provenance": {
+        "page": 1,
+        "row": 2,
+        "cells": [
+          "01.10.2026",
+          "01.10.2026",
+          "10.00 RUB",
+          "",
+          "10.00 RUB",
+          "Оплата\nМногострочное описание\nПродолжение на другой странице",
+          "Магазин"
+        ],
+        "table": 1,
+        "continuations": [
+          [
+            2,
+            1,
+            2,
+            [
+              "",
+              "",
+              "",
+              "",
+              "",
+              "Продолжение на другой странице",
+              ""
+            ]
+          ]
+        ]
+      },
+      "occurred_at": {
+        "value": "2026-10-01",
+        "status": "known",
+        "reason": null
+      },
+      "processed_at": {
+        "value": "2026-10-01",
+        "status": "known",
+        "reason": null
+      },
+      "amount": {
+        "amount": "-10.00",
+        "currency": "RUB"
+      },
+      "original_amount": {
+        "value": {
+          "amount": "10.00",
+          "currency": "RUB"
+        },
+        "status": "known",
+        "reason": null
+      },
+      "description": "Оплата\nМногострочное описание\nПродолжение на другой странице",
+      "counterparty": {
+        "value": "Магазин",
+        "status": "known",
+        "reason": null
+      },
+      "operation_type": {
+        "value": null,
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      "category": {
+        "value": null,
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      "status": {
+        "value": null,
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      "related_product_id": {
+        "value": null,
+        "status": "absent",
+        "reason": "no_unambiguous_source_account_reference"
+      },
+      "selection_date_basis": "bank_document_period; operation_date_basis_unconfirmed"
+    },
+    {
+      "product_id": "product-7b9a9db57020fcc6",
+      "document_id": "bdea360e56d045ed926149f5b0390f28",
+      "provenance": {
+        "page": 2,
+        "row": 3,
+        "cells": [
+          "01.10.2026",
+          "01.10.2026",
+          "10.00 RUB",
+          "",
+          "10.00 RUB",
+          "Оплата",
+          "Магазин"
+        ],
+        "table": 1,
+        "continuations": []
+      },
+      "occurred_at": {
+        "value": "2026-10-01",
+        "status": "known",
+        "reason": null
+      },
+      "processed_at": {
+        "value": "2026-10-01",
+        "status": "known",
+        "reason": null
+      },
+      "amount": {
+        "amount": "-10.00",
+        "currency": "RUB"
+      },
+      "original_amount": {
+        "value": {
+          "amount": "10.00",
+          "currency": "RUB"
+        },
+        "status": "known",
+        "reason": null
+      },
+      "description": "Оплата",
+      "counterparty": {
+        "value": "Магазин",
+        "status": "known",
+        "reason": null
+      },
+      "operation_type": {
+        "value": null,
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      "category": {
+        "value": null,
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      "status": {
+        "value": null,
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      "related_product_id": {
+        "value": null,
+        "status": "absent",
+        "reason": "no_unambiguous_source_account_reference"
+      },
+      "selection_date_basis": "bank_document_period; operation_date_basis_unconfirmed"
+    },
+    {
+      "product_id": "product-3f916eb127d3a156",
+      "document_id": "bf83d52c6d974bbba2e0fc5911e0ae28",
+      "provenance": {
+        "page": 1,
+        "row": 2,
+        "cells": [
+          "05.10.2026",
+          "05.10.2026",
+          "5.00 RUB",
+          "5.00 RUB",
+          "",
+          "Проценты",
+          "Банк"
+        ],
+        "table": 1,
+        "continuations": []
+      },
+      "occurred_at": {
+        "value": "2026-10-05",
+        "status": "known",
+        "reason": null
+      },
+      "processed_at": {
+        "value": "2026-10-05",
+        "status": "known",
+        "reason": null
+      },
+      "amount": {
+        "amount": "5.00",
+        "currency": "RUB"
+      },
+      "original_amount": {
+        "value": {
+          "amount": "5.00",
+          "currency": "RUB"
+        },
+        "status": "known",
+        "reason": null
+      },
+      "description": "Проценты",
+      "counterparty": {
+        "value": "Банк",
+        "status": "known",
+        "reason": null
+      },
+      "operation_type": {
+        "value": null,
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      "category": {
+        "value": null,
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      "status": {
+        "value": null,
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      "related_product_id": {
+        "value": null,
+        "status": "absent",
+        "reason": "no_unambiguous_source_account_reference"
+      },
+      "selection_date_basis": "bank_document_period; operation_date_basis_unconfirmed"
+    }
+  ],
+  "documents": [
+    {
+      "document_id": "bdea360e56d045ed926149f5b0390f28",
+      "kind": "account_statement",
+      "product_id": "product-7b9a9db57020fcc6",
+      "card_id": null,
+      "period": {
+        "start": "2026-10-01",
+        "end": "2026-10-08"
+      },
+      "acquired_at": "2026-10-09T15:30:26.999224+00:00",
+      "local_path": "runs/demo/documents/de094a411ab84e5b8ae231e8494474ac.pdf"
+    },
+    {
+      "document_id": "5755e7d095204e29b955bdb5793783a5",
+      "kind": "account_statement",
+      "product_id": "product-93955b215ef74558",
+      "card_id": null,
+      "period": {
+        "start": "2026-10-07",
+        "end": "2026-10-08"
+      },
+      "acquired_at": "2026-10-09T15:30:27.212888+00:00",
+      "local_path": "runs/demo/documents/95c4738ad5ad4177919288c376197a53.pdf"
+    },
+    {
+      "document_id": "bf83d52c6d974bbba2e0fc5911e0ae28",
+      "kind": "account_statement",
+      "product_id": "product-3f916eb127d3a156",
+      "card_id": null,
+      "period": {
+        "start": "2026-10-05",
+        "end": "2026-10-08"
+      },
+      "acquired_at": "2026-10-09T15:30:27.307676+00:00",
+      "local_path": "runs/demo/documents/61debd903e9b4b8f96efcd5dbf52ba43.pdf"
+    },
+    {
+      "document_id": "70f19874da67419ca11ea5336129689e",
+      "kind": "card_statement",
+      "product_id": "product-7b9a9db57020fcc6",
+      "card_id": "card-0d3fe1dc843c2c00",
+      "period": {
+        "start": "2026-10-01",
+        "end": "2026-10-08"
+      },
+      "acquired_at": "2026-10-09T15:30:27.401607+00:00",
+      "local_path": "runs/demo/documents/fc7a6525cbc34625bc4f6b904a129660.pdf"
+    }
+  ],
+  "report": {
+    "status": "full",
+    "scope": "active_accounts_and_deposits_only; closed_products_excluded",
+    "discovery": {
+      "status": "complete",
+      "evidence": "explicit_synthetic_inventory_end"
+    },
+    "snapshot": "parts_acquired_at_individual_times",
+    "date_basis": "bank_document_period; operation_filter_date_unconfirmed",
+    "counts": {
+      "products": 3,
+      "cards": 1,
+      "operations": 3,
+      "documents": 4,
+      "rejected_rows": 0
+    },
+    "products": [
+      {
+        "product_id": "product-7b9a9db57020fcc6",
+        "account_history_status": "complete"
+      },
+      {
+        "product_id": "product-93955b215ef74558",
+        "account_history_status": "complete"
+      },
+      {
+        "product_id": "product-3f916eb127d3a156",
+        "account_history_status": "complete"
+      }
+    ],
+    "cards": [
+      {
+        "card_id": "card-0d3fe1dc843c2c00",
+        "indicator_status": "complete"
+      }
+    ],
+    "field_coverage": [
+      {
+        "product_id": "product-7b9a9db57020fcc6",
+        "field": "available_balance",
+        "status": "absent",
+        "reason": "no_separately_labelled_available_balance_in_observed_details"
+      },
+      {
+        "product_id": "product-7b9a9db57020fcc6",
+        "field": "operations.operation_type",
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      {
+        "product_id": "product-7b9a9db57020fcc6",
+        "field": "operations.category",
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      {
+        "product_id": "product-7b9a9db57020fcc6",
+        "field": "operations.status",
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      {
+        "product_id": "product-7b9a9db57020fcc6",
+        "field": "operations.related_product_id",
+        "status": "absent",
+        "reason": "no_unambiguous_source_account_reference"
+      },
+      {
+        "product_id": "product-93955b215ef74558",
+        "field": "current_balance",
+        "status": "absent",
+        "reason": "savings_header_balance_semantics_unconfirmed"
+      },
+      {
+        "product_id": "product-93955b215ef74558",
+        "field": "available_balance",
+        "status": "absent",
+        "reason": "no_separately_labelled_available_balance_in_observed_details"
+      },
+      {
+        "product_id": "product-3f916eb127d3a156",
+        "field": "current_balance",
+        "status": "absent",
+        "reason": "savings_header_balance_semantics_unconfirmed"
+      },
+      {
+        "product_id": "product-3f916eb127d3a156",
+        "field": "available_balance",
+        "status": "absent",
+        "reason": "no_separately_labelled_available_balance_in_observed_details"
+      },
+      {
+        "product_id": "product-3f916eb127d3a156",
+        "field": "operations.operation_type",
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      {
+        "product_id": "product-3f916eb127d3a156",
+        "field": "operations.category",
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      {
+        "product_id": "product-3f916eb127d3a156",
+        "field": "operations.status",
+        "status": "absent",
+        "reason": "not_in_source"
+      },
+      {
+        "product_id": "product-3f916eb127d3a156",
+        "field": "operations.related_product_id",
+        "status": "absent",
+        "reason": "no_unambiguous_source_account_reference"
+      },
+      {
+        "card_id": "card-0d3fe1dc843c2c00",
+        "field": "available_balance.as_of",
+        "status": "absent",
+        "reason": "balance_as_of_not_in_document"
+      }
+    ],
+    "reasons": []
+  }
+}
