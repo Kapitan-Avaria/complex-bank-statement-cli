@@ -12,6 +12,63 @@ import main
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_wait_budgets_reach_browser_and_adapter(tmp_path, monkeypatch):
+    playwright = Mock()
+    browser = playwright.chromium.launch.return_value
+    page = browser.new_context.return_value.new_page.return_value
+    monkeypatch.setattr(main, "sync_playwright", lambda: nullcontext(playwright))
+    inputs = iter(["", "да"])
+    monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
+    monkeypatch.setattr(
+        main, "run_statement", Mock(return_value={"report": {"status": "partial"}})
+    )
+    assert (
+        main.main(
+            [
+                "--source",
+                "vtb",
+                "--from",
+                "2026-10-01",
+                "--to",
+                "2026-10-08",
+                "--output",
+                str(tmp_path / "run"),
+                "--page-wait-seconds",
+                "90",
+                "--document-wait-seconds",
+                "15",
+            ]
+        )
+        == 2
+    )
+    page.set_default_timeout.assert_called_once_with(90_000)
+    page.set_default_navigation_timeout.assert_called_once_with(90_000)
+    assert page.goto.call_args.kwargs["timeout"] == 90_000
+    adapter = main.run_statement.call_args.args[0]
+    assert adapter.wait_seconds == 15
+
+
+@pytest.mark.parametrize("flag", ["--page-wait-seconds", "--document-wait-seconds"])
+@pytest.mark.parametrize("budget", ["0", "-1", "301", "nan"])
+def test_invalid_wait_budget_is_rejected(flag, budget, monkeypatch, capsys):
+    launch = Mock()
+    monkeypatch.setattr(main, "sync_playwright", launch)
+    with pytest.raises(SystemExit) as exc:
+        main.main(
+            [
+                "--from",
+                "2026-10-01",
+                "--to",
+                "2026-10-08",
+                flag,
+                budget,
+            ]
+        )
+    assert exc.value.code == 2
+    launch.assert_not_called()
+    assert flag in capsys.readouterr().err
+
+
 def cli(*args):
     return subprocess.run(
         [sys.executable, str(ROOT / "src/main.py"), *args],
@@ -61,7 +118,7 @@ def test_synthetic_cli_produces_reviewable_export(tmp_path):
         "--automated",
         "--output",
         str(tmp_path / "run"),
-        "--wait-seconds",
+        "--document-wait-seconds",
         "2",
     )
     assert result.returncode == 0, result.stdout + result.stderr

@@ -41,6 +41,7 @@ def run_statement(
     stopped = False
     if discovery.status != "complete":
         reasons.append({"stage": "discovery", "reason": discovery.evidence})
+    reasons.extend(json_value(failure) for failure in discovery.failures)
     for product in discovery.products:
         plan = plan_extraction_for_active_product(requested, product.opened_on.value)
         entry: dict[str, Any] = {
@@ -177,7 +178,12 @@ def run_statement(
                 checkpoints.save_pending(key, binding, plan.extraction_period)
             stage, reason, stop = _failure(exc, "parsing")
             reasons.append(
-                {"product_id": product.product_id, "stage": stage, "reason": reason}
+                {
+                    "product_id": product.product_id,
+                    "stage": stage,
+                    "reason": reason,
+                    **(exc.diagnostics if isinstance(exc, SourceError) else {}),
+                }
             )
             stopped = stopped or stop
         # Every unit exports usable data, including before a later interruption.
@@ -294,7 +300,14 @@ def run_statement(
             )
         except (SourceError, ValueError, OSError, KeyboardInterrupt) as exc:
             stage, reason, stop = _failure(exc, "card_parsing")
-            reasons.append({"card_id": card.card_id, "stage": stage, "reason": reason})
+            reasons.append(
+                {
+                    "card_id": card.card_id,
+                    "stage": stage,
+                    "reason": reason,
+                    **(exc.diagnostics if isinstance(exc, SourceError) else {}),
+                }
+            )
             stopped = stopped or stop
         _export(result, discovery, reasons, coverage, output)
     _export(result, discovery, reasons, coverage, output)

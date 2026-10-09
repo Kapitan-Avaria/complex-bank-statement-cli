@@ -12,10 +12,18 @@ from products import Card, Product
 class SourceError(Exception):
     """A safe, structured source failure; messages contain no personal data."""
 
-    def __init__(self, stage: str, reason: str, submitted: bool = False) -> None:
+    def __init__(
+        self,
+        stage: str,
+        reason: str,
+        submitted: bool = False,
+        *,
+        diagnostics: dict[str, str | None] | None = None,
+    ) -> None:
         self.stage = stage
         self.reason = reason
         self.submitted = submitted
+        self.diagnostics = diagnostics or {}
         super().__init__(f"{stage}: {reason}")
 
 
@@ -25,11 +33,22 @@ class SessionExpired(SourceError):
 
 
 @dataclass(frozen=True)
+class DiscoveryFailure:
+    family: str
+    index: int
+    stage: str
+    reason: str
+    browser_operation: str | None = None
+    browser_error: str | None = None
+
+
+@dataclass(frozen=True)
 class DiscoveryResult:
     products: tuple[Product, ...]
     cards: tuple[Card, ...]
     status: Literal["complete", "uncertain", "failed"]
     evidence: str
+    failures: tuple[DiscoveryFailure, ...] = ()
 
     def __post_init__(self) -> None:
         if self.status not in ("complete", "uncertain", "failed"):

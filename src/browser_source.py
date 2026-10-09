@@ -5,7 +5,7 @@ import hashlib
 import re
 import time
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
@@ -13,8 +13,9 @@ from uuid import uuid4
 
 from playwright.sync_api import Download, Page, Response
 from playwright.sync_api import Error as BrowserError
+from playwright.sync_api import TimeoutError as BrowserTimeout
 
-from adapters import DiscoveryResult, SessionExpired, SourceError
+from adapters import DiscoveryFailure, DiscoveryResult, SessionExpired, SourceError
 from documents import StatementDocument
 from fields import FieldValue
 from money import Money, parse_amount
@@ -40,6 +41,97 @@ def period_input(period: DateRange) -> str:
     return f"{period.start:%d.%m.%Y} – {period.end:%d.%m.%Y}"
 
 
+def card_suffix(text: str, accessible_label: str) -> str | None:
+    suffixes = set(re.findall(r"[*•·]+\s*(\d{4})(?!\d)", text))
+    labelled = re.findall(
+        r"с последними цифрами\s+(\d{2}\s*\d{2})(?=\s*[,.;]|$)",
+        accessible_label,
+        re.IGNORECASE,
+    )
+    suffixes.update(re.sub(r"\s", "", value) for value in labelled)
+    # The observed VTB control displays the suffix alone, without mask symbols.
+    # Use bare digits only to cross-check the explicitly labelled suffix.
+    if labelled and re.fullmatch(r"\s*\d{4}\s*", text):
+        suffixes.add(text.strip())
+    if len(suffixes) > 1:
+        raise SourceError("card_identity", "ambiguous_card_mask_in_source")
+    return next(iter(suffixes), None)
+
+
+def transient_browser_failure(exc: BrowserError) -> str | None:
+    # Match fixed signatures only. Never persist raw exception text or URLs.
+    signatures = {
+        "net::ERR_CONNECTION_RESET": "network_connection_reset",
+        "net::ERR_CONNECTION_CLOSED": "network_connection_closed",
+        "net::ERR_INTERNET_DISCONNECTED": "network_disconnected",
+        "net::ERR_TIMED_OUT": "network_timeout",
+        "net::ERR_ABORTED": "navigation_interrupted",
+        "Navigation interrupted": "navigation_interrupted",
+        "Execution context was destroyed": "page_context_changed",
+    }
+    return next(
+        (reason for signature, reason in signatures.items() if signature in str(exc)),
+        None,
+    )
+
+
+def browser_diagnostic(exc: Exception) -> dict[str, str | None]:
+    while not isinstance(exc, BrowserError) and isinstance(exc.__cause__, Exception):
+        exc = exc.__cause__
+    if not isinstance(exc, BrowserError):
+        return {"browser_operation": None, "browser_error": None}
+    message = str(exc)
+    operations = (
+        "Page.goto",
+        "Page.wait_for_url",
+        "Page.evaluate",
+        "Page.wait_for_timeout",
+        "Locator.wait_for",
+        "Locator.inner_text",
+        "Locator.count",
+        "Locator.click",
+        "Locator.fill",
+        "Locator.input_value",
+        "Locator.is_visible",
+        "Download.save_as",
+        "Response.body",
+    )
+    operation = next(
+        (name for name in operations if message.startswith(name + ":")), "unknown"
+    )
+    codes = (
+        "ERR_FAILED",
+        "ERR_NAME_NOT_RESOLVED",
+        "ERR_HTTP_RESPONSE_CODE_FAILURE",
+        "ERR_BLOCKED_BY_CLIENT",
+        "ERR_CERT_AUTHORITY_INVALID",
+        "ERR_CONNECTION_RESET",
+        "ERR_CONNECTION_CLOSED",
+        "ERR_INTERNET_DISCONNECTED",
+        "ERR_TIMED_OUT",
+        "ERR_ABORTED",
+    )
+    code = next((name for name in codes if "net::" + name in message), None)
+    signatures = {
+        "is interrupted by another navigation": "navigation_interrupted",
+        "Execution context was destroyed": "page_context_changed",
+        "Cannot find context with specified id": "page_context_missing",
+        "Target page, context or browser has been closed": "target_closed",
+        "strict mode violation": "ambiguous_locator",
+        "Element is not attached": "element_detached",
+        "TypeError:": "javascript_type_error",
+        "ReferenceError:": "javascript_reference_error",
+    }
+    if code is None:
+        code = next(
+            (name for signature, name in signatures.items() if signature in message),
+            None,
+        )
+    if code is None:
+        code = "timeout" if isinstance(exc, BrowserTimeout) else "unclassified"
+    return {"browser_operation": operation, "browser_error": code}
+
+
 class VtbAdapter:
     inventory_families = (
         "MASTER_ACCOUNT",
@@ -52,29 +144,126 @@ class VtbAdapter:
         page: Page,
         base_url: str = "https://online.vtb.ru",
         wait_seconds: float = 60,
+        page_wait_seconds: float = 60,
     ) -> None:
         self.page = page
         self.base_url = base_url.rstrip("/")
         self.wait_seconds = wait_seconds
-        self.page.set_default_timeout(10_000)
+        self.page_wait_seconds = page_wait_seconds
+        self.page.set_default_timeout(page_wait_seconds * 1000)
+        self.page.set_default_navigation_timeout(page_wait_seconds * 1000)
         self.routes: dict[str, str] = {}
         self.card_routes: dict[str, str] = {}
+        self._blob_capture_key = "__vtb_statement_blob_" + uuid4().hex
+        # Install before the bank's scripts can cache createObjectURL. Capture is
+        # enabled only while acquiring a savings statement, then released.
+        self._blob_capture_script = """(() => {
+            const key = 'CAPTURE_KEY';
+            if (window[key]) return;
+            const original = URL.createObjectURL;
+            const capture = {original, blobs: new Map(), active: false, calls: 0};
+            capture.wrapped = function(blob) {
+                const url = original.call(this, blob);
+                if (capture.active) capture.calls++;
+                // Blob identity must also work for objects from another frame.
+                if (capture.active && Object.prototype.toString.call(blob) === '[object Blob]')
+                    capture.blobs.set(url, blob);
+                return url;
+            };
+            window[key] = capture;
+            URL.createObjectURL = capture.wrapped;
+        })()""".replace("CAPTURE_KEY", self._blob_capture_key)
+        self.page.add_init_script(self._blob_capture_script)
 
     def _check_session(self) -> None:
         if urlparse(self.page.url).path.startswith("/login"):
-            raise SessionExpired()
+            try:
+                self.page.wait_for_url(
+                    lambda url: not urlparse(url).path.startswith("/login"),
+                    wait_until="domcontentloaded",
+                )
+            except BrowserTimeout as exc:
+                raise SessionExpired() from exc
 
-    def _goto(self, route: str) -> None:
-        self.page.goto(self.base_url + route, wait_until="domcontentloaded")
-        self._check_session()
+    def _goto(self, route: str, *, force_reload: bool = False) -> None:
+        target = self.base_url + route
+        try:
+            # Discovery already clicked into details. Reloading that route again
+            # discards the SPA's rendered state and repeats authentication work.
+            if (
+                force_reload
+                or self.page.url.split("?", 1)[0].split("#", 1)[0] != target
+            ):
+                self.page.goto(target, wait_until="domcontentloaded")
+            self.page.wait_for_url(
+                lambda url: url.split("?", 1)[0].split("#", 1)[0] == target,
+                wait_until="domcontentloaded",
+            )
+        except BrowserTimeout as exc:
+            if urlparse(self.page.url).path.startswith("/login"):
+                raise SessionExpired() from exc
+            raise SourceError("navigation", "page_navigation_timeout") from exc
         portal = self.page.locator("#host-modals-portal")
         if portal.count() and portal.inner_text().strip():
             raise SourceError("readiness", "unexpected_modal")
 
-    def _inventory(self) -> None:
-        self._goto("/home/all-products")
-        self.page.get_by_text("Карты и счета", exact=True).wait_for()
-        self.page.get_by_text("Вклады и счета", exact=True).wait_for()
+    def _inventory(self) -> str:
+        for attempt in range(3):
+            try:
+                return self._read_inventory(force_reload=attempt > 0)
+            except BrowserError as exc:
+                self._check_session()
+                reason = transient_browser_failure(exc)
+                if reason is None:
+                    raise SourceError(
+                        "readiness", "inventory_browser_action_failed"
+                    ) from exc
+                if attempt == 2:
+                    raise SourceError("readiness", reason) from exc
+                self.page.wait_for_timeout(250 * (attempt + 1))
+        raise AssertionError("Unreachable inventory retry state")
+
+    def _read_inventory(self, *, force_reload: bool = False) -> str:
+        self._goto("/home/all-products", force_reload=force_reload)
+        try:
+            self.page.get_by_text("Карты и счета", exact=True).filter(
+                visible=True
+            ).first.wait_for()
+            self.page.get_by_text("Вклады и счета", exact=True).filter(
+                visible=True
+            ).first.wait_for()
+        except BrowserTimeout as exc:
+            self._check_session()
+            raise SourceError("readiness", "inventory_sections_timeout") from exc
+        # Section headings can render before the product controls. A quiet window
+        # prevents reading an intermediate list; it is not proof of completeness.
+        deadline = time.monotonic() + self.page_wait_seconds
+        previous = None
+        stable_since = time.monotonic()
+        while time.monotonic() < deadline:
+            self._check_session()
+            portal = self.page.locator("#host-modals-portal")
+            if portal.count() and portal.inner_text().strip():
+                raise SourceError("readiness", "unexpected_modal")
+            snapshot = self.page.evaluate(
+                """families => {
+                    const groups = families.map(family =>
+                        Array.from(document.querySelectorAll(`[data-test-id="${family}"]`))
+                            .map(node => [node.getAttribute('data-id'), node.textContent,
+                                node.getAttribute('aria-label')]));
+                    return groups.some(group => group.length)
+                        ? JSON.stringify(groups) : null;
+                }""",
+                self.inventory_families,
+            )
+            now = time.monotonic()
+            if snapshot != previous or snapshot is None:
+                previous = snapshot
+                stable_since = now
+            elif now - stable_since >= 0.5:
+                return snapshot
+            self.page.wait_for_timeout(100)
+        raise SourceError("readiness", "inventory_not_stable_within_budget")
 
     def _completion(self) -> tuple[Literal["complete", "uncertain"], str]:
         return "uncertain", "vtb_inventory_end_not_confirmed"
@@ -138,7 +327,7 @@ class VtbAdapter:
                 current = known(
                     BalanceReading(
                         Money(parse_amount(match[1]), "RUB"),
-                        datetime.now(timezone.utc),
+                        datetime.now(UTC),
                         "VTB account details: Баланс",
                     )
                 )
@@ -161,6 +350,8 @@ class VtbAdapter:
                     if currencies == ["Российский рубль"] or currencies == ["RUB"]
                     else missing("unsupported_currency", True)
                 )
+        except SessionExpired:
+            raise
         except (SourceError, BrowserError, ValueError):
             self._check_session()
         masked = re.search(r"[*•·]+\s*(\d{4})", label)
@@ -183,8 +374,9 @@ class VtbAdapter:
         products: list[Product] = []
         cards: list[Card] = []
         errors = False
+        failures: list[DiscoveryFailure] = []
         try:
-            self._inventory()
+            inventory = self._inventory()
             status, evidence = self._completion()
             families = [
                 (family, self.page.locator(f'[data-test-id="{family}"]').count())
@@ -192,19 +384,28 @@ class VtbAdapter:
             ]
             for family, count in families:
                 for index in range(count):
+                    stage = "inventory_read"
                     try:
-                        self._inventory()
+                        # The first control is already on the verified inventory.
+                        current_inventory = (
+                            inventory
+                            if not products and not cards and not failures
+                            else self._inventory()
+                        )
                         controls = self.page.locator(f'[data-test-id="{family}"]')
-                        if controls.count() != count:
+                        if current_inventory != inventory or controls.count() != count:
                             raise SourceError(
                                 "discovery", "inventory_changed_during_read"
                             )
                         control = controls.nth(index)
                         label = control.inner_text()
+                        accessible_label = control.get_attribute("aria-label") or ""
+                        stage = "product_navigation"
                         control.click()
                         self.page.wait_for_url(re.compile(r".*/details/[^/]+/[^/]+$"))
                         self._check_session()
                         route = urlparse(self.page.url).path
+                        stage = "product_details"
                         if family != "debet_card_main_page":
                             products.append(self._product(route, label))
                         else:
@@ -217,13 +418,13 @@ class VtbAdapter:
                             self.card_routes[card_id] = (
                                 "/details/MasterAccountCard/" + reference
                             )
-                            mask = re.search(r"[*•·]+\s*(\d{4})", label)
+                            suffix = card_suffix(label, accessible_label)
                             cards.append(
                                 Card(
                                     card_id,
                                     known(reference),
-                                    known("****" + mask[1])
-                                    if mask
+                                    known("****" + suffix)
+                                    if suffix
                                     else missing("card_mask_unread", True),
                                     missing("card_link_unconfirmed", True),
                                     missing("card_document_not_read", True),
@@ -231,8 +432,23 @@ class VtbAdapter:
                             )
                     except SessionExpired:
                         raise
-                    except (SourceError, BrowserError, ValueError):
+                    except (SourceError, BrowserError, ValueError) as exc:
                         errors = True
+                        failures.append(
+                            DiscoveryFailure(
+                                family,
+                                index,
+                                exc.stage if isinstance(exc, SourceError) else stage,
+                                exc.reason
+                                if isinstance(exc, SourceError)
+                                else "page_element_timeout"
+                                if isinstance(exc, BrowserTimeout)
+                                else "browser_action_failed"
+                                if isinstance(exc, BrowserError)
+                                else "invalid_product_metadata",
+                                **browser_diagnostic(exc),
+                            )
+                        )
             for index, card in enumerate(cards):
                 try:
                     rows = self._requisites(
@@ -255,20 +471,51 @@ class VtbAdapter:
                         else missing("card_account_match_missing_or_ambiguous", True)
                     )
                     cards[index] = replace(card, account_link=link)
-                except (SourceError, BrowserError, ValueError):
+                except SessionExpired:
+                    raise
+                except (SourceError, BrowserError, ValueError) as exc:
                     self._check_session()
                     errors = True
+                    failures.append(
+                        DiscoveryFailure(
+                            "debet_card_main_page",
+                            index,
+                            exc.stage
+                            if isinstance(exc, SourceError)
+                            else "card_requisites",
+                            exc.reason
+                            if isinstance(exc, SourceError)
+                            else "page_element_timeout"
+                            if isinstance(exc, BrowserTimeout)
+                            else "browser_action_failed"
+                            if isinstance(exc, BrowserError)
+                            else "invalid_card_metadata",
+                            **browser_diagnostic(exc),
+                        )
+                    )
             return DiscoveryResult(
                 tuple(products),
                 tuple(cards),
                 "failed" if errors else status,
                 "metadata_discovery_incomplete" if errors else evidence,
+                tuple(failures),
             )
         except (SourceError, BrowserError) as exc:
             reason = (
                 exc.reason if isinstance(exc, SourceError) else "inventory_read_failed"
             )
-            return DiscoveryResult(tuple(products), tuple(cards), "failed", reason)
+            failures.append(
+                DiscoveryFailure(
+                    "inventory",
+                    0,
+                    exc.stage if isinstance(exc, SourceError) else "discovery",
+                    reason,
+                    **browser_diagnostic(exc),
+                )
+            )
+            return DiscoveryResult(
+                tuple(products), tuple(cards), "failed", reason, tuple(failures)
+            )
 
     def acquire_account(
         self,
@@ -329,6 +576,8 @@ class VtbAdapter:
         new_pages: list[Page] = []
         login_responses: list[Response] = []
         pdf_responses: list[Response] = []
+        blob_capture = None
+        blob_read_diagnostics: dict[str, str] = {}
 
         def downloaded(download: Download):
             downloads.append(download)
@@ -353,6 +602,7 @@ class VtbAdapter:
         self.page.on("download", downloaded)
         context.on("page", attach)
         context.on("response", response)
+        step = "navigation"
         try:
             self._goto(route)
             history_opened = False
@@ -366,19 +616,36 @@ class VtbAdapter:
                     )
                     if new_order.count():
                         new_order.click()
+                step = "period_input"
                 field = self.page.get_by_label(label, exact=True)
                 field.fill(period_input(period))
                 if field.input_value() != period_input(period):
                     raise SourceError("period_input", "period_readback_mismatch")
+                if "/SavingsAccount/" in route:
+                    # Also cover a page already loaded before adapter creation.
+                    self.page.evaluate(self._blob_capture_script)
+                    blob_capture = self.page.evaluate_handle(
+                        """key => {
+                            const capture = window[key];
+                            capture.blobs.clear();
+                            capture.calls = 0;
+                            capture.active = true;
+                            URL.createObjectURL = capture.wrapped;
+                            return capture;
+                        }""",
+                        self._blob_capture_key,
+                    )
+                step = "submit"
                 self.page.get_by_role("button", name=action, exact=True).click()
                 submitted = master
+            step = "document_wait"
             deadline = time.monotonic() + self.wait_seconds
             ready_clicked = False
             next_refresh = 0.0
             while time.monotonic() < deadline:
-                self._check_session()
                 if login_responses:
                     raise SessionExpired()
+                self._check_session()
                 if downloads:
                     downloads[0].save_as(destination)
                     if destination.stat().st_size:
@@ -396,22 +663,46 @@ class VtbAdapter:
                     (p.url for p in new_pages if p.url.startswith("blob:")), None
                 )
                 if blob:
-                    # Blob URLs remain readable in the consenting page's origin. No viewer UI selectors.
+                    step = "blob_read"
+                    captured = blob_capture is not None and blob_capture.evaluate(
+                        "(capture, url) => capture.blobs.has(url)", blob
+                    )
+                    blob_read_diagnostics["blob_captured"] = (
+                        "true" if captured else "false"
+                    )
+                    if blob_capture is not None:
+                        blob_read_diagnostics["blob_capture_calls"] = str(
+                            blob_capture.evaluate("capture => capture.calls")
+                        )
+                    blob_read_diagnostics["blob_frame_count"] = str(
+                        len(self.page.frames)
+                    )
+                    same_origin = self.page.evaluate(
+                        "url => new URL(url.slice(5)).origin === location.origin", blob
+                    )
+                    blob_read_diagnostics["blob_origin_matches_page"] = (
+                        "true" if same_origin else "false"
+                    )
                     encoded = self.page.evaluate(
-                        """async url => {
-                        const response = await fetch(url);
-                        if (!response.ok) throw Error('blob_read_failed');
-                        const blob = await response.blob();
+                        """async ({url, capture}) => {
+                        let blob = capture?.blobs.get(url);
+                        if (!blob) {
+                            const response = await fetch(url);
+                            if (!response.ok) throw Error('blob_read_failed');
+                            blob = await response.blob();
+                        }
                         return await new Promise((resolve,reject) => {
                             const reader = new FileReader(); reader.onload=()=>resolve(reader.result.split(',')[1]);
                             reader.onerror=reject; reader.readAsDataURL(blob);
                         });
                     }""",
-                        blob,
+                        {"url": blob, "capture": blob_capture},
                     )
                     destination.write_bytes(base64.b64decode(encoded))
                     break
-                if not card_id and "/MasterAccount/" in route:
+                # Both account and card orders can lead to the saved-statements UI,
+                # including when a document for this period is already ready.
+                if master or card_id:
                     history = self.page.get_by_role(
                         "button", name="К выпискам", exact=True
                     )
@@ -478,11 +769,18 @@ class VtbAdapter:
                 product_id,
                 card_id,
                 period,
-                datetime.now(timezone.utc),
+                datetime.now(UTC),
                 destination,
             )
         except SourceError as exc:
             exc.submitted = submitted
+            exc.diagnostics.update(
+                {
+                    "acquisition_step": step,
+                    **blob_read_diagnostics,
+                    **browser_diagnostic(exc),
+                }
+            )
             raise
         except KeyboardInterrupt as exc:
             raise SourceError(
@@ -494,9 +792,36 @@ class VtbAdapter:
                 expired.submitted = submitted
                 raise expired from exc
             raise SourceError(
-                "acquisition", "browser_action_failed", submitted=submitted
+                "acquisition",
+                "browser_action_failed",
+                submitted=submitted,
+                diagnostics={
+                    "acquisition_step": step,
+                    **blob_read_diagnostics,
+                    **browser_diagnostic(exc),
+                },
             ) from exc
         finally:
+            try:
+                self.page.evaluate(
+                    """key => {
+                            const capture = window[key];
+                            if (!capture) return;
+                            capture.active = false;
+                            if (URL.createObjectURL === capture.wrapped)
+                                URL.createObjectURL = capture.original;
+                            capture.blobs.clear();
+                        }""",
+                    self._blob_capture_key,
+                )
+            except BrowserError:
+                # Navigation/closure already released the page's objects.
+                pass
+            if blob_capture is not None:
+                try:
+                    blob_capture.dispose()
+                except BrowserError:
+                    pass
             self.page.remove_listener("download", downloaded)
             context.remove_listener("page", attach)
             context.remove_listener("response", response)

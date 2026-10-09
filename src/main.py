@@ -74,7 +74,13 @@ def parser() -> argparse.ArgumentParser:
         default="complete",
     )
     cli.add_argument(
-        "--wait-seconds",
+        "--page-wait-seconds",
+        type=float,
+        default=60,
+        help="Бюджет ожидания загрузки страницы и элементов, 0 < значение <= 300",
+    )
+    cli.add_argument(
+        "--document-wait-seconds",
         type=float,
         default=60,
         help="Бюджет ожидания одного документа, 0 < значение <= 300",
@@ -89,8 +95,10 @@ def main(argv: list[str] | None = None) -> int:
         requested = DateRange(args.start, args.end)
     except ValueError:
         cli.error("Начало периода должно быть не позже конца")
-    if not 0 < args.wait_seconds <= 300:
-        cli.error("--wait-seconds должен быть от 0 (не включая) до 300")
+    if not 0 < args.document_wait_seconds <= 300:
+        cli.error("--document-wait-seconds должен быть от 0 (не включая) до 300")
+    if not 0 < args.page_wait_seconds <= 300:
+        cli.error("--page-wait-seconds должен быть от 0 (не включая) до 300")
     if args.source == "vtb" and (
         args.automated or args.consent == "yes" or args.scenario != "complete"
     ):
@@ -150,7 +158,11 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 try:
                     page = context.new_page()
-                    page.goto(base_url + "/login", wait_until="domcontentloaded")
+                    page.goto(
+                        base_url + "/login",
+                        wait_until="domcontentloaded",
+                        timeout=args.page_wait_seconds * 1000,
+                    )
                     if args.automated:
                         page.get_by_role("button", name="Войти", exact=True).click()
                     else:
@@ -175,9 +187,19 @@ def main(argv: list[str] | None = None) -> int:
                         print("Чтение не разрешено.")
                         return 3
                     adapter = (
-                        SyntheticAdapter(page, base_url, args.wait_seconds)
+                        SyntheticAdapter(
+                            page,
+                            base_url,
+                            args.document_wait_seconds,
+                            args.page_wait_seconds,
+                        )
                         if args.source == "synthetic"
-                        else VtbAdapter(page, base_url, args.wait_seconds)
+                        else VtbAdapter(
+                            page,
+                            base_url,
+                            args.document_wait_seconds,
+                            args.page_wait_seconds,
+                        )
                     )
                     result = run_statement(
                         adapter, requested, output, resume=args.resume
