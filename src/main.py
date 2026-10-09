@@ -37,6 +37,16 @@ def parser() -> argparse.ArgumentParser:
         help="YYYY-MM-DD, включительно",
     )
     cli.add_argument("--output", type=Path)
+    cli.add_argument(
+        "--browser-executable",
+        type=Path,
+        help="Путь к установленному Chromium-совместимому браузеру (например Яндекс)",
+    )
+    cli.add_argument(
+        "--ignore-https-errors",
+        action="store_true",
+        help="Небезопасно: игнорировать ошибки TLS-сертификатов на свой страх и риск",
+    )
     cli.add_argument("--resume", action="store_true")
     cli.add_argument(
         "--automated",
@@ -99,7 +109,9 @@ def main(argv: list[str] | None = None) -> int:
     if output.is_relative_to(root):
         ignored = (
             subprocess.run(
-                ["git", "check-ignore", "-q", str(output / "statement.json")], cwd=root
+                ["git", "check-ignore", "-q", str(output / "statement.json")],
+                cwd=root,
+                check=False,
             ).returncode
             == 0
         )
@@ -115,11 +127,27 @@ def main(argv: list[str] | None = None) -> int:
         if args.source == "synthetic"
         else nullcontext("https://online.vtb.ru")
     )
+    if args.ignore_https_errors:
+        print(
+            "ВНИМАНИЕ: --ignore-https-errors отключает проверку TLS-сертификатов "
+            "для всех запросов в браузерном контексте этого запуска. "
+            "Это небезопасно: возможны подмена сайта и перехват банковских данных. "
+            "Используйте на свой страх и риск."
+        )
     try:
         with server as base_url, sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=args.automated)
+            browser = playwright.chromium.launch(
+                headless=args.automated,
+                executable_path=(
+                    args.browser_executable.expanduser().resolve()
+                    if args.browser_executable
+                    else None
+                ),
+            )
             try:
-                context = browser.new_context(accept_downloads=True)
+                context = browser.new_context(
+                    accept_downloads=True, ignore_https_errors=args.ignore_https_errors
+                )
                 try:
                     page = context.new_page()
                     page.goto(base_url + "/login", wait_until="domcontentloaded")
@@ -163,7 +191,19 @@ def main(argv: list[str] | None = None) -> int:
                     context.close()
             finally:
                 browser.close()
-    except (BrowserError, OSError, RuntimeError):
+    except BrowserError as exc:
+        if "net::ERR_CERT_AUTHORITY_INVALID" in str(exc):
+            print(
+                "Браузер не доверяет TLS-сертификату сайта "
+                "(ERR_CERT_AUTHORITY_INVALID). "
+                "Для ВТБ установите сертификаты по инструкции https://www.vtb.ru/crt/ "
+                "или выберите Яндекс Браузер через --browser-executable. "
+                "Проверка HTTPS остаётся включённой."
+            )
+        else:
+            print("Не удалось завершить запуск браузера или локального хранилища.")
+        return 2
+    except (OSError, RuntimeError):
         print("Не удалось завершить запуск браузера или локального хранилища.")
         return 2
     except (KeyboardInterrupt, EOFError):
